@@ -196,7 +196,7 @@ ii = 0
 for i in tensor:
     worksheet.write(0,ii,i)
     ii+=1
-workbook.save('tensor.xlsx')
+workbook.save('tensor.xls')
 
 df2 = df2.sort_values()
 colors = cm.RdYlGn(np.linspace(0,1,len(df2))) 
