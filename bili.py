@@ -111,14 +111,30 @@ while cur_list:
 	cur_list = response.json()['data']['list']
 print('git history info success')
 
-df = pd.DataFrame(history_list)
+df_history = pd.DataFrame(history_list)
+strftime = time.strftime('%Y-%m-%d', time.localtime())
+fpath = os.path.join(os.getcwd(), f'bili_history_{strftime}.xlsx')
+df_history.to_excel(fpath, index=False)
+print('save success', fpath)
 
+# 从包含bili_history的excel文件导入数据
+data_dir = os.getcwd()
+identifier = 'bili_history'
+df = pd.DataFrame()
+for file_name in os.listdir(data_dir):
+    if file_name.startswith(identifier) and file_name.endswith('.xlsx'):
+        fpath = os.path.join(data_dir, file_name)
+        print(fpath)
+        df_ = pd.read_excel(fpath)
+        df = df.append(pd.read_excel(fpath))
+ 
 # 数据预处理
 df.drop_duplicates(inplace=True)
 df = df.astype({'tag_name': 'string', 'author_name': 'string'})
 df['date'] = pd.to_datetime(df['view_at'],unit='s',origin=pd.Timestamp('1970-01-01 08:00:00'))
 df['date'] = df['date'].dt.strftime("%Y-%m-%d")
 df = df.fillna({"tag_name":"无"})
+
 
 category = {
  '番剧': ['资讯', '官方延伸','连载动画','完结动画''新番时间表','番剧索引'],
