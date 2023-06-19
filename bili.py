@@ -70,7 +70,7 @@ def islogin(session):
         print('Cookies值有效，',loginurl['data']['uname'],'，已登录！')
         return session, True
     else:
-        print('Cookies值已经失效，请重新扫码登录！')
+        print('请使用b站app扫码登录！')
         return session, False
 
 
@@ -97,10 +97,8 @@ def bzlogin():
         tokenurl = 'https://passport.bilibili.com/qrcode/getLoginInfo'
         while 1:
             qrcodedata = session.post(tokenurl, data={'oauthKey': oauthKey, 'gourl': 'https://www.bilibili.com/'}, headers=headerss).json()
-            print(qrcodedata)
-            if '-4' in str(qrcodedata['data']):
-                print('二维码未失效，请扫码！')
-            elif '-5' in str(qrcodedata['data']):
+            # print(qrcodedata)
+            if '-5' in str(qrcodedata['data']):
                 print('已扫码，请确认！')
             elif '-2' in str(qrcodedata['data']):
                 print('二维码已失效，请重新运行！')
@@ -108,8 +106,6 @@ def bzlogin():
                 print('已确认，登入成功！')
                 session.get(qrcodedata['data']['url'], headers=headers)
                 break
-            else:
-                print('其他：', qrcodedata)
             time.sleep(2)
         session.cookies.save()
     return session
@@ -134,24 +130,19 @@ while cur_list:
 	url = 'https://api.bilibili.com/x/web-interface/history/cursor?max={}&view_at={}&business=archive'.format(cursor['max'], cursor['view_at'])
 	response = session.get(url, cookies=cookies_dict)
 	cur_list = response.json()['data']['list']
-print('git history info success')
+print('正在生成历史观看报告')
 
 df_history = pd.DataFrame(history_list)
 strftime = time.strftime('%Y-%m-%d', time.localtime())
 fpath = os.path.join(os.getcwd(), f'bili_history_{strftime}.xlsx')
 df_history.to_excel(fpath, index=False)
-print('save success', fpath)
+# print('save success', fpath)
 
 # 从包含bili_history的excel文件导入数据
 data_dir = os.getcwd()
-identifier = 'bili_history'
 df = pd.DataFrame()
-for file_name in os.listdir(data_dir):
-    if file_name.startswith(identifier) and file_name.endswith('.xlsx'):
-        fpath = os.path.join(data_dir, file_name)
-        print(fpath)
-        df_ = pd.read_excel(fpath)
-        df = df._append(pd.read_excel(fpath))
+df_ = pd.read_excel(fpath)
+df = df._append(pd.read_excel(fpath))
  
 # 数据预处理
 df.drop_duplicates(inplace=True)
@@ -225,6 +216,9 @@ for i in indexes:
     worksheet.write(0,ii,i)
     ii+=1
 workbook.save('tensor.xls')
+
+os.remove(fpath)
+os.remove('bzcookies.txt')
 
 df2 = df2.sort_values()
 colors = cm.RdYlGn(np.linspace(0,1,len(df2))) 
