@@ -9,6 +9,7 @@ https://github.com/SherlockChiang/bili_video_history_record/releases/tag/packed
 运行后会呈现终端，并打开一张二维码图片。此时，需要使用b站app扫码登陆。
 b站扫码步骤：打开右下角“我的”界面，扫一扫在最上方的位置
 ![image](https://github.com/SherlockChiang/bili_video_history_record/assets/98642231/e9db33d2-09d5-4829-b394-25b49f6425bf)
+
 点击确认即可获取浏览记录信息
 **在这里，我们仅仅用到您观看不同种类视频的数量，也就是最后产生的tensor.xls文件中记录的信息**
 
