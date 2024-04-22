@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
-
 # 这里参考了https://blog.csdn.net/qq_18303993/article/details/114481841
 import qrcode
 from threading import Thread
 import time
 import requests
-import webbrowser
 import tkinter as tk
 from io import BytesIO
 import http.cookiejar as cookielib
@@ -13,16 +11,20 @@ from PIL import Image, ImageTk
 import os
 import pandas as pd
 from pandas.api.types import CategoricalDtype
+import webbrowser
 import xlwt
 import matplotlib.pyplot as plt 
 import matplotlib.cm as cm 
-import numpy as np 
-
+from webdav4.client import Client
 
 def get_key(val, dict):
     for key, value in dict.items():
          if val in value:
              return key
+
+def linspace(start, stop, num):
+    step = (stop - start) / (num - 1)
+    return [start + i * step for i in range(num)]
 
 def get_index(val, cate, keys_cate, dict):
     index = 0
@@ -71,64 +73,44 @@ class showpng(Thread):
         w.title('请用b站app扫码登录')
         w.mainloop()
 
-def islogin(session):
-    try:
-        session.cookies.load(ignore_discard=True)
-    except Exception:
-        pass
-    loginurl = session.get("https://api.bilibili.com/x/web-interface/nav", verify=False, headers=headers).json()
-    if loginurl['code'] == 0:
-        print('Cookies值有效，',loginurl['data']['uname'],'，已登录！')
-        return session, True
-    else:
-        print('请使用b站app扫码登录！')
-        return session, False
-
-
 def bzlogin():
     if not os.path.exists('bzcookies.txt'):
         with open("bzcookies.txt", 'w') as f:
             f.write("")
     session = requests.session()
     session.cookies = cookielib.LWPCookieJar(filename='bzcookies.txt')
-    session, status = islogin(session)
-    if not status:
-        getlogin = session.get('https://passport.bilibili.com/qrcode/getLoginUrl', headers=headers).json()
-        loginurl = requests.get(getlogin['data']['url'], headers=headers).url
-        oauthKey = getlogin['data']['oauthKey']
-        qr = qrcode.QRCode()
-        qr.add_data(loginurl)
-        img = qr.make_image()
-        a = BytesIO()
-        img.save(a, 'png')
-        png = a.getvalue()
-        a.close()
-        t = showpng(png)
-        t.start()
-        tokenurl = 'https://passport.bilibili.com/qrcode/getLoginInfo'
-        while 1:
-            qrcodedata = session.post(tokenurl, data={'oauthKey': oauthKey, 'gourl': 'https://www.bilibili.com/'}, headers=headerss).json()
-            # print(qrcodedata)
-            if '-5' in str(qrcodedata['data']):
-                print('已扫码，请确认！')
-            elif '-2' in str(qrcodedata['data']):
-                print('二维码已失效，请重新运行！')
-            elif 'True' in str(qrcodedata['status']):
-                print('已确认，登入成功！')
-                session.get(qrcodedata['data']['url'], headers=headers)
-                break
-            time.sleep(2)
-        session.cookies.save()
-    return session
 
-def onButton():
-    #使用全局变量
-    global i,button,label
-    i+=1
-    m=i
-    #根据按钮次数动态修改指定值
-    if i == 1:
-        root_window.destroy()
+    getlogin = session.get('https://passport.bilibili.com/x/passport-login/web/qrcode/generate', headers=headers).json()
+    loginurl = requests.get(getlogin['data']['url'], headers=headers).url
+    qrcode_key = getlogin['data']['qrcode_key']
+    qr = qrcode.QRCode()
+    qr.add_data(loginurl)
+    img = qr.make_image()
+    a = BytesIO()
+    img.save(a, 'png')
+    png = a.getvalue()
+    a.close()
+    t = showpng(png)
+    t.start()
+    tokenurl = 'https://passport.bilibili.com/x/passport-login/web/qrcode/poll'
+    while 1:
+        url = tokenurl + '?qrcode_key=' + qrcode_key
+        qrcodedata = session.get(url, headers=headerss).json()
+        # print(qrcodedata)
+        if qrcodedata['data']['code'] == 86090:
+            print('已扫码，请确认！')
+        elif qrcodedata['data']['code'] == 86038:
+            print('二维码已失效，请重新运行！')
+            session = ''
+            break
+        elif qrcodedata['data']['code'] == 0:
+            print('已确认，登入成功！')
+            session.get(qrcodedata['data']['url'], headers=headers)
+            break
+        time.sleep(1)
+    session.cookies.save()
+
+    return session
 
 def get_input():
     global id
@@ -140,7 +122,7 @@ def cookie_analyse(session):
     cookies_dict = requests.utils.dict_from_cookiejar(session.cookies)
 
     session = requests.Session()
-    response = session.get('https://api.bilibili.com/x/web-interface/history/cursor', cookies=cookies_dict)
+    response = session.get('https://api.bilibili.com/x/web-interface/history/cursor', cookies=cookies_dict, headers=headers)
 
     history_list = []
     cur_list = response.json()['data']['list']
@@ -152,20 +134,19 @@ def cookie_analyse(session):
         history_list += cur_list
         cursor = response.json()['data']['cursor']
         url = 'https://api.bilibili.com/x/web-interface/history/cursor?max={}&view_at={}&business=archive'.format(cursor['max'], cursor['view_at'])
-        response = session.get(url, cookies=cookies_dict)
+        response = session.get(url, cookies=cookies_dict, headers=headers)
         cur_list = response.json()['data']['list']
     print('正在生成历史观看报告')
 
     df_history = pd.DataFrame(history_list)
     strftime = time.strftime('%Y-%m-%d', time.localtime())
-    fpath = os.path.join(os.getcwd(), f'bili_history_{strftime}.xlsx')
+    fpath = os.path.join(os.getcwd(), f'bili_history_{id}_{strftime}.xlsx')
     df_history.to_excel(fpath, index=False)
-    # print('save success', fpath)
-
+    client = Client(base_url='https://dav.jianguoyun.com/dav/',
+                auth=('sherlockchiang@gmail.com', 'key')) # 此处请自行修改
+    # client.upload_file(from_path=fpath, to_path='/benji/'+f'bili_history_{id}_{strftime}.xlsx', overwrite=False)
     # 从包含bili_history的excel文件导入数据
-    data_dir = os.getcwd()
     df = pd.DataFrame()
-    df_ = pd.read_excel(fpath)
     df = df._append(pd.read_excel(fpath))
     
     # 数据预处理
@@ -239,72 +220,47 @@ def cookie_analyse(session):
     for i in indexes:
         worksheet.write(0,ii,i)
         ii+=1
-    tensor_filename = str(id) + '.xls'
+    tensor_filename = str(id) + time.strftime('_%Y%m%d_%H%M%S', time.localtime()) + '.xls'
     workbook.save(tensor_filename)
+    client.upload_file(from_path=tensor_filename, to_path='/benji/'+tensor_filename, overwrite=False)
 
     os.remove(fpath)
     os.remove('bzcookies.txt')
 
     df2 = df2.sort_values()
-    colors = cm.RdYlGn(np.linspace(0,1,len(df2))) 
+    colors = cm.RdYlGn(linspace(0,1,len(df2)))
     df2.plot(kind='barh', color=colors) 
     plt.title('您近三个月中的b站浏览视频类型分析')
     plt.rcParams['font.sans-serif'] = ['SimHei']
     plt.rcParams['axes.unicode_minus'] = False
     plt.show() 
 
-    tensor_filepath = os.getcwd()
-    start_directory = os.path.abspath(tensor_filepath)
-    os.system("explorer.exe %s" % start_directory)
-    webbrowser.open('https://pan.bnu.edu.cn/l/Z1Ji2k')
-
-
 if __name__ == '__main__':
     root_window =tk.Tk()
     root_window.attributes('-topmost', 1)
-    # 给主窗口起一个名字，也就是窗口的名字
     root_window.title('实验程序')
-    # 设置窗口大小:宽x高,注,此处不能为 "*",必须使用 "x"
-    # root_window.geometry("300x50+0+700")
 
-    screenWidth = root_window.winfo_screenwidth()  # 获取显示区域的宽度
-    screenHeight = root_window.winfo_screenheight()  # 获取显示区域的高度
-    width = 300  # 设定窗口宽度
-    height = 100  # 设定窗口高度
+    screenWidth = root_window.winfo_screenwidth() 
+    screenHeight = root_window.winfo_screenheight()
+    width = 300
+    height = 100
     left = (screenWidth - width) / 2
     top = (screenHeight - height) / 2
 
-    # 宽度x高度+x偏移+y偏移
-    # 在设定宽度和高度的基础上指定窗口相对于屏幕左上角的偏移位置
     root_window.geometry("%dx%d+%d+%d" % (width, height, left, top))
 
-    L1 = tk.Label(root_window, text="请输入您的被试编号")
+    L1 = tk.Label(root_window, text="请输入您的被试编号/手机号")
     L1.pack()
     E1 = tk.Entry(root_window, bd =5)
     E1.pack()
     confirm_button = tk.Button(root_window, text="确认输入", command=get_input)
     confirm_button.pack()
-
     root_window.mainloop()
 
-    webbrowser.open('https://www.wjx.cn/vm/QJdInKa.aspx')
-
-    root_window =tk.Tk()
-    root_window.attributes('-topmost', 1)
-    # 给主窗口起一个名字，也就是窗口的名字
-    root_window.title('实验程序')
-    root_window.geometry("300x50+0+700")
-    # 添加文本内,设置字体的前景色和背景色，和字体类型、大小
-    text=tk.Label(root_window,text="请在问卷星页面提交完毕后点击")
-    # 将文本内容放置在主窗口内
-    text.pack()
-    i = 0
-    # 添加按钮，以及按钮的文本，并通过command 参数设置关闭窗口的功能
-    button = tk.Button(root_window, text='我已答完', command= onButton)
-    # 将按钮放置在主窗口内
-    button.pack(side="bottom")
-    #进入主循环，显示主窗口
-    root_window.mainloop()
+    webbrowser.open('https://www.wjx.cn/vm/Y5kqFOX.aspx')
     
     session = bzlogin()
-    cookie_analyse(session)
+    if session == '':
+        print('请重新运行！')
+    else:
+        cookie_analyse(session)
